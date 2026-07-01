@@ -21,6 +21,13 @@ class CreateEmailDraftRequest(BaseModel):
     subject: str = Field(..., description="The email subject line.")
     body: str = Field(..., description="The main text body of the email.")
 
+@app.get("/health", status_code=status.HTTP_200_OK)
+def health_check():
+    """
+    Simple health check endpoint to verify the server is running.
+    """
+    return {"status": "healthy"}
+
 def ask_approval(action_name: str, payload: dict) -> bool:
     """
     Prints action details to the console and waits for the user's manual y/n approval.

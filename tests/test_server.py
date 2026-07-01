@@ -97,5 +97,13 @@ class TestMCPServer(unittest.TestCase):
         self.assertIn("Failed to append to Google Doc", response.json()["detail"])
         mock_append_to_doc.assert_called_once()
 
+    def test_health_check(self):
+        # Act
+        response = client.get("/health")
+        
+        # Assert
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "healthy"})
+
 if __name__ == '__main__':
     unittest.main()
