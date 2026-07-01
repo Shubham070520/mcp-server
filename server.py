@@ -1,5 +1,7 @@
 import sys
-from fastapi import FastAPI, HTTPException, status
+import os
+from fastapi import FastAPI, HTTPException, status, Security, Depends
+from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel, Field
 from docs_tool import append_to_doc
 from gmail_tool import create_email_draft
@@ -9,6 +11,24 @@ app = FastAPI(
     description="A FastAPI server providing Google Docs and Gmail tools with manual console approval.",
     version="1.0.0"
 )
+
+# API Key Security Setup
+API_KEY_NAME = "X-API-Key"
+api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
+
+def verify_api_key(api_key: str = Depends(api_key_header)):
+    """
+    Checks if X-API-Key header matches MCP_API_KEY environment variable.
+    If MCP_API_KEY is not configured in the environment, API key authentication is bypassed.
+    """
+    expected_key = os.environ.get("MCP_API_KEY")
+    if not expected_key:
+        return
+    if api_key != expected_key:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API Key"
+        )
 
 # Pydantic request models
 class AppendToDocRequest(BaseModel):
@@ -44,16 +64,17 @@ def ask_approval(action_name: str, payload: dict) -> bool:
         return False
 
 @app.post("/append_to_doc", status_code=status.HTTP_200_OK)
-def append_to_doc_endpoint(payload: AppendToDocRequest):
+def append_to_doc_endpoint(payload: AppendToDocRequest, _ = Depends(verify_api_key)):
     """
-    Endpoint to append text to a Google Document. Requires console-based manual approval.
+    Endpoint to append text to a Google Document. Requires console-based manual approval if no API key is set.
     """
     data = payload.model_dump()
-    if not ask_approval("append_to_doc", data):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Action rejected by user."
-        )
+    if not os.environ.get("MCP_API_KEY"):
+        if not ask_approval("append_to_doc", data):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Action rejected by user."
+            )
     
     try:
         result = append_to_doc(payload.doc_id, payload.content)
@@ -70,16 +91,17 @@ def append_to_doc_endpoint(payload: AppendToDocRequest):
         )
 
 @app.post("/create_email_draft", status_code=status.HTTP_200_OK)
-def create_email_draft_endpoint(payload: CreateEmailDraftRequest):
+def create_email_draft_endpoint(payload: CreateEmailDraftRequest, _ = Depends(verify_api_key)):
     """
-    Endpoint to create a Gmail email draft. Requires console-based manual approval.
+    Endpoint to create a Gmail email draft. Requires console-based manual approval if no API key is set.
     """
     data = payload.model_dump()
-    if not ask_approval("create_email_draft", data):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Action rejected by user."
-        )
+    if not os.environ.get("MCP_API_KEY"):
+        if not ask_approval("create_email_draft", data):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Action rejected by user."
+            )
         
     try:
         result = create_email_draft(payload.to, payload.subject, payload.body)
